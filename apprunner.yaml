@@ -2,16 +2,15 @@ version: 1.0
 runtime: nodejs18
 build:
   commands:
-    build:
-      - echo "Installing dependencies for production"
-      - npm ci --only=production
-      - echo "Build completed successfully"
+    # ビルドフェーズの前に依存関係をインストールします
+    pre-build:
+      - npm install
 run:
-  runtime-version: 18
-  command: node index.js
+  # package.jsonのstartスクリプトを実行します
+  command: npm start
   network:
+    # アプリケーションがリッスンするポート番号
     port: 3000
-    env: PORT
   env:
     - name: NODE_ENV
       value: production
