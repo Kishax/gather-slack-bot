@@ -21,6 +21,7 @@ class GatherSlackBot {
 		this.pendingEvents = []; // 初期ロード中に受信したイベントを保存
 		this.processedJoinEvents = new Set(); // 処理済み参加イベントを追跡（重複回避）
 		this.connectionCheckInterval = null; // 定期接続チェック用
+		this.keepAliveInterval = null; // Keep-Alive用
 		// 初期環境変数の処理（JSONオブジェクトの場合があるため）
 		this.slackWebhookUrl = this.parseEnvValue(process.env.SLACK_WEBHOOK_URL);
 		this.gatherApiKey = this.parseEnvValue(process.env.GATHER_API_KEY);
@@ -743,6 +744,27 @@ class GatherSlackBot {
 		return this.connectedUsers.size;
 	}
 
+	// Keep-Alive機能（App Runnerのサスペンドを防ぐ）
+	startKeepAlive() {
+		if (this.keepAliveInterval) {
+			clearInterval(this.keepAliveInterval);
+		}
+		
+		console.log("🔄 Keep-Alive機能を開始（30秒間隔）");
+		this.keepAliveInterval = setInterval(() => {
+			// 軽量な処理でアプリケーションの活動を維持
+			const now = new Date().toISOString();
+			console.log(`💗 Keep-Alive: ${now}`);
+			
+			// 接続状態の確認
+			if (this.game && this.game.isConnected) {
+				console.log(`✅ Gather接続正常 (${this.getCurrentUserCount()}人)`);
+			} else {
+				console.log(`⚠️ Gather接続異常を検出`);
+			}
+		}, 30000); // 30秒ごと
+	}
+
 	// 定期的なステータス報告（オプション）
 	startStatusReporting(intervalMinutes = 60) {
 		setInterval(
@@ -774,6 +796,12 @@ class GatherSlackBot {
 			if (this.connectionCheckInterval) {
 				clearInterval(this.connectionCheckInterval);
 				console.log("🛑 定期接続チェックを停止しました");
+			}
+
+			// Keep-Aliveを停止
+			if (this.keepAliveInterval) {
+				clearInterval(this.keepAliveInterval);
+				console.log("🛑 Keep-Alive機能を停止しました");
 			}
 
 			if (this.game) {
@@ -955,6 +983,9 @@ async function main() {
 	try {
 		// Bot接続開始
 		await bot.connect();
+
+		// Keep-Alive機能開始（App Runnerサスペンド防止）
+		bot.startKeepAlive();
 
 		// 1時間ごとにステータス報告
 		bot.startStatusReporting(60);
