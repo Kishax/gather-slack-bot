@@ -600,6 +600,8 @@ class GatherSlackBot {
 	async connect() {
 		try {
 			console.log("🔄 Gatherに接続中...");
+			console.log(`🔍 Space ID: ${this.gatherSpaceId}`);
+			console.log(`🔍 API Key: ${this.gatherApiKey ? 'あり' : 'なし'}`);
 
 			this.game = new Game(this.gatherSpaceId, () =>
 				Promise.resolve({ apiKey: this.gatherApiKey }),
@@ -619,11 +621,11 @@ class GatherSlackBot {
 				} else {
 					console.log("❌ Gatherから切断されました");
 					this.initialUsersLoaded = false; // 再接続時に初期化をやり直し
-					// 再接続を試行
+					// 再接続を試行（10秒間隔に延長してレート制限を回避）
 					setTimeout(() => {
 						console.log("🔄 再接続を試行します...");
 						this.connect();
-					}, 5000);
+					}, 10000);
 				}
 			});
 
@@ -727,11 +729,12 @@ class GatherSlackBot {
 			console.log("🚀 Gather接続プロセス開始");
 		} catch (error) {
 			console.error("❌ 接続エラー:", error);
-			// 5秒後に再試行
+			console.error("エラー詳細:", error.stack);
+			// 10秒後に再試行（レート制限を回避）
 			setTimeout(() => {
-				console.log("🔄 5秒後に再接続を試行します...");
+				console.log("🔄 10秒後に再接続を試行します...");
 				this.connect();
-			}, 5000);
+			}, 10000);
 		}
 	}
 
