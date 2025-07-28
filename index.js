@@ -1,6 +1,15 @@
 require("dotenv").config();
 const { Game } = require("@gathertown/gather-game-client");
 const axios = require("axios");
+const http = require("http");
+
+// AWS SDK for Secrets Manager (App Runner用)
+let AWS;
+try {
+	AWS = require("aws-sdk");
+} catch (error) {
+	console.log("i AWS SDK not available, using environment variables");
+}
 
 class GatherSlackBot {
 	constructor() {
@@ -17,20 +26,78 @@ class GatherSlackBot {
 
 		// 設定チェック
 		if (!this.slackWebhookUrl || !this.gatherApiKey || !this.gatherSpaceId) {
-			throw new Error(
-				"環境変数が設定されていません。.envファイルを確認してください。",
+			console.log(
+				"! 一部の環境変数が設定されていません。Secrets Managerから取得を試行します。",
 			);
 		}
 
 		console.log("🔧 設定確認:");
-		console.log(`- Space ID: ${this.gatherSpaceId}`);
+		console.log(`- Space ID: ${this.gatherSpaceId || "未設定"}`);
 		console.log(`- API Key: ${this.gatherApiKey ? "設定済み" : "未設定"}`);
 		console.log(
 			`- Slack Webhook: ${this.slackWebhookUrl ? "設定済み" : "未設定"}`,
 		);
+		console.log(`- Node.js Version: ${process.version}`);
+		console.log(`- Environment: ${process.env.NODE_ENV || "development"}`);
+		console.log(`- AWS Region: ${process.env.AWS_REGION || "not set"}`);
 	}
 
-	// Slackに通知を送信
+	// AWS Secrets Managerから環境変数を取得
+	async loadSecretsFromAWS() {
+		if (!AWS || !process.env.AWS_REGION) {
+			console.log(
+				"i AWS SDK または AWS_REGION が設定されていません。環境変数を使用します。",
+			);
+			return;
+		}
+
+		try {
+			console.log("🔒 AWS Secrets Managerから設定を取得中...");
+
+			const secretsManager = new AWS.SecretsManager({
+				region: process.env.AWS_REGION,
+			});
+
+			const result = await secretsManager
+				.getSecretValue({
+					SecretId: "gather-bot-apprunner-secrets",
+				})
+				.promise();
+
+			const secrets = JSON.parse(result.SecretString);
+
+			// 環境変数に設定
+			this.gatherApiKey = secrets.GATHER_API_KEY || this.gatherApiKey;
+			this.gatherSpaceId = secrets.GATHER_SPACE_ID || this.gatherSpaceId;
+			this.slackWebhookUrl = secrets.SLACK_WEBHOOK_URL || this.slackWebhookUrl;
+
+			// プロセス環境変数も更新
+			process.env.GATHER_API_KEY = this.gatherApiKey;
+			process.env.GATHER_SPACE_ID = this.gatherSpaceId;
+			process.env.SLACK_WEBHOOK_URL = this.slackWebhookUrl;
+
+			console.log("✅ Secrets Manager から設定を取得しました");
+		} catch (error) {
+			console.error("❌ Secrets Manager エラー:", error.message);
+			console.log("i 環境変数を使用します");
+		}
+	}
+
+	// 設定の最終確認
+	validateConfiguration() {
+		if (!this.slackWebhookUrl || !this.gatherApiKey || !this.gatherSpaceId) {
+			const missing = [];
+			if (!this.gatherApiKey) missing.push("GATHER_API_KEY");
+			if (!this.gatherSpaceId) missing.push("GATHER_SPACE_ID");
+			if (!this.slackWebhookUrl) missing.push("SLACK_WEBHOOK_URL");
+
+			throw new Error(
+				`必要な環境変数が設定されていません: ${missing.join(", ")}`,
+			);
+		}
+
+		console.log("✅ 設定確認完了");
+	}
 	async sendSlackNotification(message, color = "#36a64f") {
 		try {
 			const payload = {
@@ -685,17 +752,142 @@ class GatherSlackBot {
 	}
 }
 
+// HTTPサーバー作成（App Runner要件）
+function createHealthServer(bot) {
+	const server = http.createServer((req, res) => {
+		// CORS設定
+		res.setHeader("Access-Control-Allow-Origin", "*");
+		res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+		res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+
+		if (req.method === "OPTIONS") {
+			res.writeHead(200);
+			res.end();
+			return;
+		}
+
+		if (req.url === "/health" || req.url === "/") {
+			const status = {
+				status: "healthy",
+				timestamp: new Date().toISOString(),
+				uptime: Math.floor(process.uptime()),
+				memory: {
+					used: Math.round(process.memoryUsage().heapUsed / 1024 / 1024),
+					total: Math.round(process.memoryUsage().heapTotal / 1024 / 1024),
+				},
+				bot: {
+					connectedUsers: bot ? bot.getCurrentUserCount() : 0,
+					initialLoaded: bot ? bot.initialUsersLoaded : false,
+					gatherConnected: bot && bot.game ? !!bot.game.isConnected : false,
+				},
+				version: process.env.npm_package_version || "1.0.0",
+				environment: process.env.NODE_ENV || "development",
+			};
+
+			res.writeHead(200, { "Content-Type": "application/json" });
+			res.end(JSON.stringify(status, null, 2));
+		} else if (req.url === "/status") {
+			const detailedStatus = {
+				service: {
+					name: "Gather Slack Bot",
+					version: "1.0.0",
+					environment: process.env.NODE_ENV,
+					region: process.env.AWS_REGION,
+				},
+				bot: {
+					connected: bot && bot.game ? !!bot.game.isConnected : false,
+					userCount: bot ? bot.getCurrentUserCount() : 0,
+					cacheSize: bot ? bot.userNameCache.size : 0,
+					initialLoaded: bot ? bot.initialUsersLoaded : false,
+					pendingEvents: bot ? bot.pendingEvents.length : 0,
+				},
+				system: {
+					nodeVersion: process.version,
+					platform: process.platform,
+					arch: process.arch,
+					uptime: Math.floor(process.uptime()),
+					pid: process.pid,
+				},
+				memory: process.memoryUsage(),
+				lastHealthCheck: new Date().toISOString(),
+			};
+
+			res.writeHead(200, { "Content-Type": "application/json" });
+			res.end(JSON.stringify(detailedStatus, null, 2));
+		} else if (req.url === "/metrics") {
+			const metrics = {
+				uptime_seconds: process.uptime(),
+				memory_usage_mb: Math.round(
+					process.memoryUsage().heapUsed / 1024 / 1024,
+				),
+				connected_users_count: bot ? bot.getCurrentUserCount() : 0,
+				cache_size: bot ? bot.userNameCache.size : 0,
+				bot_connected: bot && bot.game ? (bot.game.isConnected ? 1 : 0) : 0,
+				timestamp: Date.now(),
+			};
+
+			res.writeHead(200, { "Content-Type": "application/json" });
+			res.end(JSON.stringify(metrics));
+		} else {
+			res.writeHead(404, { "Content-Type": "application/json" });
+			res.end(
+				JSON.stringify({
+					error: "Not Found",
+					availableEndpoints: ["/health", "/status", "/metrics"],
+				}),
+			);
+		}
+	});
+
+	return server;
+}
+
 // メイン実行関数
 async function main() {
 	console.log("🚀 Gather Slack Bot 起動中...");
 	console.log(`📅 起動時刻: ${new Date().toLocaleString("ja-JP")}`);
+	console.log(`🌐 環境: ${process.env.NODE_ENV || "development"}`);
+	console.log(`📍 ポート: ${process.env.PORT || 3000}`);
+	console.log(`🏗 Platform: ${process.platform} ${process.arch}`);
+	console.log(`📦 Node.js: ${process.version}`);
 
 	const bot = new GatherSlackBot();
+
+	try {
+		// AWS Secrets Managerから設定を取得
+		await bot.loadSecretsFromAWS();
+
+		// 設定の最終確認
+		bot.validateConfiguration();
+	} catch (error) {
+		console.error("❌ 初期化エラー:", error.message);
+		process.exit(1);
+	}
+
+	// HTTPサーバー起動
+	const server = createHealthServer(bot);
+	const PORT = process.env.PORT || 3000;
+
+	server.listen(PORT, "0.0.0.0", () => {
+		console.log(`🌐 HTTPサーバーがポート${PORT}で起動しました`);
+		console.log(`🔗 ヘルスチェック: http://localhost:${PORT}/health`);
+		console.log(`📊 ステータス: http://localhost:${PORT}/status`);
+		console.log(`📈 メトリクス: http://localhost:${PORT}/metrics`);
+	});
 
 	// 正常終了時の処理
 	const gracefulShutdown = async (signal) => {
 		console.log(`\n🛑 ${signal} 受信: Bot停止中...`);
+
+		// HTTPサーバーを停止
+		server.close(() => {
+			console.log("🌐 HTTPサーバーを停止しました");
+		});
+
+		// Botを停止
 		await bot.disconnect();
+
+		console.log("✅ 正常終了しました");
 		process.exit(0);
 	};
 
@@ -705,20 +897,28 @@ async function main() {
 	// 未処理エラーのハンドリング
 	process.on("unhandledRejection", (reason, promise) => {
 		console.error("未処理のPromise拒否:", reason);
-		bot.sendSlackNotification(`! 未処理エラー: ${reason}`, "#ff0000");
+		if (bot.slackWebhookUrl) {
+			bot
+				.sendSlackNotification(`! 未処理エラー: ${reason}`, "#ff0000")
+				.catch(console.error);
+		}
 	});
 
 	process.on("uncaughtException", (error) => {
 		console.error("未処理の例外:", error);
-		bot.sendSlackNotification(`! 重大エラー: ${error.message}`, "#ff0000");
-		process.exit(1);
+		if (bot.slackWebhookUrl) {
+			bot
+				.sendSlackNotification(`! 重大エラー: ${error.message}`, "#ff0000")
+				.catch(console.error);
+		}
+		setTimeout(() => process.exit(1), 1000);
 	});
 
 	try {
 		// Bot接続開始
 		await bot.connect();
 
-		// 1時間ごとにステータス報告（オプション）
+		// 1時間ごとにステータス報告
 		bot.startStatusReporting(60);
 
 		// 30分ごとにヘルスチェック
@@ -730,9 +930,13 @@ async function main() {
 		);
 
 		console.log("🚀 Gather Slack Bot が正常に起動しました！");
-		console.log("💡 停止するには: pm2 stop gather-bot または Ctrl+C");
-		console.log("📊 監視: pm2 monit");
-		console.log("📝 ログ: pm2 logs gather-bot");
+		console.log("💡 App Runnerで実行中...");
+
+		// App Runner用の起動確認通知
+		await bot.sendSlackNotification(
+			"🚀 Gather Bot (App Runner) が起動しました！",
+			"#00ff00",
+		);
 	} catch (error) {
 		console.error("❌ Bot起動エラー:", error);
 		await bot.sendSlackNotification(
@@ -743,7 +947,7 @@ async function main() {
 	}
 }
 
-// メイン関数実行
+// Bot起動
 if (require.main === module) {
 	main().catch((error) => {
 		console.error("❌ メイン関数エラー:", error);

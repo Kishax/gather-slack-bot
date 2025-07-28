@@ -1,3 +1,7 @@
+# AWS
+apprunner-trust-policy.json
+apprunner-permissions-policy.json
+
 # Dependencies
 node_modules/
 npm-debug.log*
