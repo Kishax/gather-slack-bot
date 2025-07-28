@@ -7,6 +7,7 @@ const http = require("http");
 let AWS;
 try {
 	AWS = require("aws-sdk");
+	console.log("✅ AWS SDK loaded successfully");
 } catch (error) {
 	console.log("i AWS SDK not available, using environment variables");
 }

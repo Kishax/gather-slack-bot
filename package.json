@@ -9,6 +9,7 @@
 	},
 	"dependencies": {
 		"@gathertown/gather-game-client": "^43.0.1",
+		"aws-sdk": "^2.1691.0",
 		"axios": "^1.6.0",
 		"dotenv": "^16.3.0"
 	},
