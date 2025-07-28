@@ -2,25 +2,16 @@ version: 1.0
 runtime: nodejs18
 build:
   commands:
-    # ビルドフェーズの前に依存関係をインストールします
     pre-build:
       - npm install
 run:
-  # package.jsonのstartスクリプトを実行します
   command: npm start
   network:
-    # アプリケーションがリッスンするポート番号
     port: 3000
-  env:
-    - name: NODE_ENV
-      value: production
-    - name: AWS_REGION
-      value: ap-northeast-1
   secrets:
-    # 環境変数名: Secrets ManagerのARN:JSONキー
     - name: GATHER_API_KEY
-      valueFrom: arn:aws:secretsmanager:ap-northeast-1:126112056177:secret:gather-bot-apprunner-secrets-EuGLYZ:GATHER_API_KEY
+      value-from: arn:aws:secretsmanager:ap-northeast-1:126112056177:secret:gather-bot-apprunner-secrets-EuGLYZ:GATHER_API_KEY
     - name: GATHER_SPACE_ID
-      valueFrom: arn:aws:secretsmanager:ap-northeast-1:126112056177:secret:gather-bot-apprunner-secrets-EuGLYZ:GATHER_SPACE_ID
+      value-from: arn:aws:secretsmanager:ap-northeast-1:126112056177:secret:gather-bot-apprunner-secrets-EuGLYZ:GATHER_SPACE_ID
     - name: SLACK_WEBHOOK_URL
-      valueFrom: arn:aws:secretsmanager:ap-northeast-1:126112056177:secret:gather-bot-apprunner-secrets-EuGLYZ:SLACK_WEBHOOK_URL
+      value-from: arn:aws:secretsmanager:ap-northeast-1:126112056177:secret:gather-bot-apprunner-secrets-EuGLYZ:SLACK_WEBHOOK_URL
