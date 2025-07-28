@@ -66,12 +66,12 @@ class GatherSlackBot {
 
 			const secrets = JSON.parse(result.SecretString);
 
-			console.log("🔍 取得したSecrets:", secrets);
+			console.log("🔍 取得したSecrets:", Object.keys(secrets));
 
-			// 環境変数に設定
-			this.gatherApiKey = secrets.GATHER_API_KEY || this.gatherApiKey;
-			this.gatherSpaceId = secrets.GATHER_SPACE_ID || this.gatherSpaceId;
-			this.slackWebhookUrl = secrets.SLACK_WEBHOOK_URL || this.slackWebhookUrl;
+			// 環境変数に設定（文字列として確実に取得）
+			if (secrets.GATHER_API_KEY) this.gatherApiKey = String(secrets.GATHER_API_KEY);
+			if (secrets.GATHER_SPACE_ID) this.gatherSpaceId = String(secrets.GATHER_SPACE_ID);
+			if (secrets.SLACK_WEBHOOK_URL) this.slackWebhookUrl = String(secrets.SLACK_WEBHOOK_URL);
 
 			// プロセス環境変数も更新
 			process.env.GATHER_API_KEY = this.gatherApiKey;
@@ -102,6 +102,11 @@ class GatherSlackBot {
 	}
 	async sendSlackNotification(message, color = "#36a64f") {
 		try {
+			// URL検証
+			if (!this.slackWebhookUrl || !this.slackWebhookUrl.startsWith('https://hooks.slack.com/')) {
+				console.error("❌ 無効なSlack Webhook URL:", this.slackWebhookUrl);
+				return false;
+			}
 			const payload = {
 				username: "Gather Bot",
 				icon_emoji: ":office:",
