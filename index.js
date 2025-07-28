@@ -66,6 +66,8 @@ class GatherSlackBot {
 
 			const secrets = JSON.parse(result.SecretString);
 
+			console.log("🔍 取得したSecrets:", secrets);
+
 			// 環境変数に設定
 			this.gatherApiKey = secrets.GATHER_API_KEY || this.gatherApiKey;
 			this.gatherSpaceId = secrets.GATHER_SPACE_ID || this.gatherSpaceId;
