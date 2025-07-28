@@ -46,18 +46,20 @@ class GatherSlackBot {
 	// 環境変数値を解析（JSONオブジェクトの場合は適切に処理）
 	parseEnvValue(value) {
 		if (!value) return null;
-		
+
 		// JSONオブジェクトとして解析を試行
 		try {
 			const parsed = JSON.parse(value);
-			if (typeof parsed === 'object' && parsed !== null) {
-				console.log("⚠️  環境変数がJSONオブジェクトです。正しい値を抽出します。");
+			if (typeof parsed === "object" && parsed !== null) {
+				console.log(
+					"!  環境変数がJSONオブジェクトです。正しい値を抽出します。",
+				);
 				return null; // Secrets Managerから正しい値を取得する
 			}
 		} catch (e) {
 			// JSON解析失敗は正常（通常の文字列値）
 		}
-		
+
 		return value;
 	}
 
@@ -88,9 +90,12 @@ class GatherSlackBot {
 			console.log("🔍 取得したSecrets:", Object.keys(secrets));
 
 			// 環境変数に設定（文字列として確実に取得）
-			if (secrets.GATHER_API_KEY) this.gatherApiKey = String(secrets.GATHER_API_KEY);
-			if (secrets.GATHER_SPACE_ID) this.gatherSpaceId = String(secrets.GATHER_SPACE_ID);
-			if (secrets.SLACK_WEBHOOK_URL) this.slackWebhookUrl = String(secrets.SLACK_WEBHOOK_URL);
+			if (secrets.GATHER_API_KEY)
+				this.gatherApiKey = String(secrets.GATHER_API_KEY);
+			if (secrets.GATHER_SPACE_ID)
+				this.gatherSpaceId = String(secrets.GATHER_SPACE_ID);
+			if (secrets.SLACK_WEBHOOK_URL)
+				this.slackWebhookUrl = String(secrets.SLACK_WEBHOOK_URL);
 
 			// プロセス環境変数も更新
 			process.env.GATHER_API_KEY = this.gatherApiKey;
@@ -122,7 +127,10 @@ class GatherSlackBot {
 	async sendSlackNotification(message, color = "#36a64f") {
 		try {
 			// URL検証
-			if (!this.slackWebhookUrl || !this.slackWebhookUrl.startsWith('https://hooks.slack.com/')) {
+			if (
+				!this.slackWebhookUrl ||
+				!this.slackWebhookUrl.startsWith("https://hooks.slack.com/")
+			) {
 				console.error("❌ 無効なSlack Webhook URL:", this.slackWebhookUrl);
 				return false;
 			}
@@ -870,7 +878,7 @@ function createHealthServer(bot) {
 
 // メイン実行関数
 async function main() {
-	console.log("🚀 Gather Slack Bot 起動中...");
+	console.log("🚀 Gather Slack Bot 起動中....");
 	console.log(`📅 起動時刻: ${new Date().toLocaleString("ja-JP")}`);
 	console.log(`🌐 環境: ${process.env.NODE_ENV || "development"}`);
 	console.log(`📍 ポート: ${process.env.PORT || 3000}`);
