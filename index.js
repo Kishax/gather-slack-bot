@@ -20,9 +20,10 @@ class GatherSlackBot {
 		this.pendingEvents = []; // 初期ロード中に受信したイベントを保存
 		this.processedJoinEvents = new Set(); // 処理済み参加イベントを追跡（重複回避）
 		this.connectionCheckInterval = null; // 定期接続チェック用
-		this.slackWebhookUrl = process.env.SLACK_WEBHOOK_URL;
-		this.gatherApiKey = process.env.GATHER_API_KEY;
-		this.gatherSpaceId = process.env.GATHER_SPACE_ID;
+		// 初期環境変数の処理（JSONオブジェクトの場合があるため）
+		this.slackWebhookUrl = this.parseEnvValue(process.env.SLACK_WEBHOOK_URL);
+		this.gatherApiKey = this.parseEnvValue(process.env.GATHER_API_KEY);
+		this.gatherSpaceId = this.parseEnvValue(process.env.GATHER_SPACE_ID);
 
 		// 設定チェック
 		if (!this.slackWebhookUrl || !this.gatherApiKey || !this.gatherSpaceId) {
@@ -40,6 +41,24 @@ class GatherSlackBot {
 		console.log(`- Node.js Version: ${process.version}`);
 		console.log(`- Environment: ${process.env.NODE_ENV || "development"}`);
 		console.log(`- AWS Region: ${process.env.AWS_REGION || "not set"}`);
+	}
+
+	// 環境変数値を解析（JSONオブジェクトの場合は適切に処理）
+	parseEnvValue(value) {
+		if (!value) return null;
+		
+		// JSONオブジェクトとして解析を試行
+		try {
+			const parsed = JSON.parse(value);
+			if (typeof parsed === 'object' && parsed !== null) {
+				console.log("⚠️  環境変数がJSONオブジェクトです。正しい値を抽出します。");
+				return null; // Secrets Managerから正しい値を取得する
+			}
+		} catch (e) {
+			// JSON解析失敗は正常（通常の文字列値）
+		}
+		
+		return value;
 	}
 
 	// AWS Secrets Managerから環境変数を取得
